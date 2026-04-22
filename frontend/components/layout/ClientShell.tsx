@@ -2,14 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 
 export default function ClientShell({ children }: { children: React.ReactNode }) {
-  const [loaded, setLoaded] = useState(false);
   const cursorRef = useRef<HTMLDivElement>(null);
-
-  /* Page load transition */
-  useEffect(() => {
-    const t = setTimeout(() => setLoaded(true), 600);
-    return () => clearTimeout(t);
-  }, []);
 
   /* Custom cursor ring */
   useEffect(() => {
@@ -71,11 +64,6 @@ export default function ClientShell({ children }: { children: React.ReactNode })
 
   return (
     <>
-      {/* Page load overlay */}
-      <div className={`page-loader ${loaded ? "done" : ""}`}>
-        <span>ASTRA<span style={{ color: "var(--color-primary)", marginLeft: 4 }}>FLOW</span></span>
-      </div>
-
       {/* Custom cursor */}
       <div ref={cursorRef} className="cursor-ring" />
 
