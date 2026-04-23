@@ -47,3 +47,7 @@ services:
         sync: false
       - key: WS_URL
         sync: false
+      - key: NEXT_PUBLIC_GEMINI_KEY
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false

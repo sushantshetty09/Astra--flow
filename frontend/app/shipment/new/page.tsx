@@ -3,13 +3,14 @@
 import { useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiPost, apiGet } from "@/lib/api";
-import { ArrowLeft, Package, Copy, Check, MapPin, ExternalLink, MessageSquare, Send } from "lucide-react";
+import { ArrowLeft, Package, Copy, Check, MapPin, ExternalLink, MessageSquare, Send, Crosshair, Loader2 } from "lucide-react";
 
 interface GeoResult { lat: number; lng: number; display_name: string; }
 interface CreateResult { tracking_id: string; share_token: string; segment_count: number; total_distance_km: number; estimated_arrival: string; }
 
 export default function NewShipmentPage() {
   const router = useRouter();
+  const getSiteUrl = () => process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== "undefined" ? window.location.origin : "");
   const [driverName, setDriverName] = useState("");
   const [driverPhone, setDriverPhone] = useState("");
   const [origin, setOrigin] = useState("");
@@ -22,8 +23,30 @@ export default function NewShipmentPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<CreateResult | null>(null);
   const [copied, setCopied] = useState(false);
+  const [locating, setLocating] = useState(false);
   const originTimer = useRef<NodeJS.Timeout | null>(null);
   const destTimer = useRef<NodeJS.Timeout | null>(null);
+
+  async function useCurrentLocation() {
+    if (!navigator.geolocation) { setError("Geolocation not supported by your browser."); return; }
+    setLocating(true); setError("");
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&zoom=16`);
+          const data = await res.json();
+          const addr = data.display_name || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+          setOrigin(addr);
+        } catch {
+          setOrigin(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        }
+        setLocating(false);
+      },
+      (err) => { setError(`Location error: ${err.message}`); setLocating(false); },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
 
   const fetchAutocomplete = useCallback(async (query: string, setter: (r: GeoResult[]) => void) => {
     if (query.length < 3) { setter([]); return; }
@@ -55,7 +78,7 @@ export default function NewShipmentPage() {
         origin: origin.trim(), destination: destination.trim(),
       });
       setResult(data);
-      const link = `${window.location.origin}/driver/${data.share_token}`;
+      const link = `${getSiteUrl()}/driver/${data.share_token}`;
       const msg = `Delivery Assignment\n\nHello Driver,\n\nYou have a new delivery. Open your route:\n${link}\n\nDispatched by Astra Flow`;
       window.open(`https://wa.me/91${driverPhone.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
     } catch (err: unknown) {
@@ -66,7 +89,7 @@ export default function NewShipmentPage() {
 
   function getSmsBody() {
     if (!result) return "";
-    const link = `${window.location.origin}/driver/${result.share_token}`;
+    const link = `${getSiteUrl()}/driver/${result.share_token}`;
     return `Delivery Assignment\n\nHello Driver,\n\nYou have a new delivery. Open your route:\n${link}\n\nDispatched by Astra Flow`;
   }
 
@@ -80,7 +103,7 @@ export default function NewShipmentPage() {
   const labelCls = "block text-sm font-medium text-[var(--text-secondary)] mb-2";
 
   if (result) {
-    const driverLink = `${typeof window !== "undefined" ? window.location.origin : ""}/driver/${result.share_token}`;
+    const driverLink = `${getSiteUrl()}/driver/${result.share_token}`;
     return (
       <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-4">
         <div className="max-w-lg w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-8">
@@ -145,7 +168,14 @@ export default function NewShipmentPage() {
               </div>
             </div>
 
-            <div className="relative"><label className={labelCls} htmlFor="origin">Origin</label>
+            <div className="relative">
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-[var(--text-secondary)]" htmlFor="origin">Origin</label>
+                <button type="button" onClick={useCurrentLocation} disabled={locating} className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[var(--accent)] hover:bg-[var(--accent)]/10 transition-colors disabled:opacity-50">
+                  {locating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Crosshair className="w-3 h-3" />}
+                  {locating ? "Locating..." : "Use Current Location"}
+                </button>
+              </div>
               <input id="origin" className={inputCls} value={origin} onChange={(e) => handleOriginChange(e.target.value)} onBlur={() => setTimeout(() => setShowOriginAC(false), 200)} onFocus={() => originResults.length > 0 && setShowOriginAC(true)} placeholder="e.g. Mumbai, Maharashtra" required />
               {showOriginAC && originResults.length > 0 && (
                 <div className="absolute z-20 mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--surface)] shadow-lg overflow-hidden">

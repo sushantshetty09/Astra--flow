@@ -10,6 +10,8 @@ import { SkeletonCard, SkeletonTable } from "@/components/ui/SkeletonLoader";
 import AstraChat from "@/components/ui/AstraChat";
 import HealthScore from "@/components/ui/HealthScore";
 import WarRoom from "@/components/ui/WarRoom";
+import dynamic from "next/dynamic";
+const DashboardMap = dynamic(() => import("@/components/ui/DashboardMap"), { ssr: false });
 import {
   LayoutDashboard, Package, Truck, Map, BarChart2, Bell, Settings,
   Sun, Moon, Search, AlertTriangle, Plus, Eye, Sparkles, Leaf,
@@ -56,13 +58,13 @@ function calcCO2(s: Shipment): number {
 }
 
 const sidebarItems = [
-  { icon: LayoutDashboard, label: "Overview", active: true },
-  { icon: Package, label: "Shipments", active: false },
-  { icon: Truck, label: "Fleet", active: false },
-  { icon: Map, label: "Routes", active: false },
-  { icon: BarChart2, label: "Analytics", active: false },
-  { icon: Bell, label: "Alerts", active: false },
-  { icon: Settings, label: "Settings", active: false },
+  { icon: LayoutDashboard, label: "Overview", id: "section-overview" },
+  { icon: Package, label: "Shipments", id: "section-shipments" },
+  { icon: Truck, label: "Fleet", id: "section-map" },
+  { icon: Map, label: "Routes", id: "section-map" },
+  { icon: BarChart2, label: "Analytics", id: "section-overview" },
+  { icon: Bell, label: "Alerts", id: "section-alerts" },
+  { icon: Settings, label: "Settings", id: "section-overview" },
 ];
 
 export default function DashboardPage() {
@@ -78,6 +80,9 @@ export default function DashboardPage() {
   const [warRoomOpen, setWarRoomOpen] = useState(false);
   const [astraPrompt, setAstraPrompt] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
+  const [mapFilter, setMapFilter] = useState<"all" | "at-risk" | "delayed">("all");
+  const [fitAllTrigger, setFitAllTrigger] = useState(0);
+  const [activeSection, setActiveSection] = useState("section-overview");
 
   const loadData = useCallback(async () => {
     try {
@@ -132,9 +137,9 @@ export default function DashboardPage() {
         </div>
         <nav className="flex-1 py-4 px-2 space-y-1">
           {sidebarItems.map((item) => (
-            <button key={item.label} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${item.active ? "bg-[var(--accent)]/10 text-[var(--accent)] font-semibold" : "text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"}`}>
+            <button key={item.label} onClick={() => { setActiveSection(item.id); document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth", block: "start" }); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${activeSection === item.id ? "bg-[var(--accent)]/10 text-[var(--accent)] font-semibold" : "text-[var(--text-secondary)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text)]"}`}>
               <item.icon className="w-4.5 h-4.5 flex-shrink-0" />
-              {!sidebarCollapsed && <span>{item.label}</span>}
+              {!sidebarCollapsed && <span>{item.label === "section-overview" ? "Settings" : item.label}</span>}
             </button>
           ))}
         </nav>
@@ -174,6 +179,7 @@ export default function DashboardPage() {
 
         <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
           {/* Stats row - 5 cards */}
+          <div id="section-overview">
           {loading ? (
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">{[1,2,3,4,5].map(i => <SkeletonCard key={i} />)}</div>
           ) : stats && (
@@ -202,9 +208,39 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+          </div>
+
+          {/* Map Section */}
+          <div id="section-map" className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border)]">
+              <div className="flex gap-2">
+                {(["all", "at-risk", "delayed"] as const).map(f => (
+                  <button 
+                    key={f} 
+                    onClick={() => setMapFilter(f)} 
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mapFilter === f ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text)]"}`}
+                  >
+                    {f === "all" ? "All" : f === "at-risk" ? "At Risk" : "Delayed"}
+                  </button>
+                ))}
+                <button 
+                  onClick={() => setFitAllTrigger(prev => prev + 1)}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium bg-[var(--surface-elevated)] text-[var(--text-secondary)] hover:text-[var(--text)] transition-colors border border-[var(--border)]"
+                >
+                  Fit All
+                </button>
+              </div>
+            </div>
+            <DashboardMap 
+              shipments={filteredShipments} 
+              filter={mapFilter} 
+              onAskAstra={(prompt) => setAstraPrompt(prompt)}
+              fitAllTrigger={fitAllTrigger}
+            />
+          </div>
 
           {/* Table + Alerts */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div id="section-shipments" className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-[var(--text)]">Shipments</h2>
@@ -259,7 +295,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Alerts panel */}
-            <div>
+            <div id="section-alerts">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-sm font-semibold text-[var(--text)]">Live Alerts</h2>
               </div>
